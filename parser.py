@@ -1,3 +1,8 @@
+import struct
+import sys
+import lzma
+from time import time
+
 """
 from enum import Enum
 
@@ -86,6 +91,7 @@ class Replay(object):
     __SHORT = 2
     __INT   = 4
     __LONG  = 8
+    __BOOL  = 12
 
     def __init__(self, replay_data, replay_file):
         self.compressed_data = replay_data
@@ -121,8 +127,6 @@ class Replay(object):
 
 
     def initialize_fields(self):
-        from time import time
-
         self.parse_main_variables() # gamemode & osu_version
         self.parse_main_strings() # beatmap_md5 - osu_replay_md5
         self.parse_score_variables() # num300 - mods
@@ -131,60 +135,67 @@ class Replay(object):
         self.parse_lzma_replay() # Actual replay data
 
     def parse_main_variables(self):
-        import struct
-
-        # Set gamemode.
         _gamemode = self.compressed_data[self.offset]
         if _gamemode < 0 or _gamemode > 3: raise Exception(f"Invalid gamemode {_gamemode}.")
         self.gamemode = _gamemode
         self.offset += self.__BYTE
 
-        # Unpack osu version.
-        _osu_version = struct.unpack('<l', self.compressed_data[self.offset:self.offset + self.__INT])[0]
-        if type(_osu_version) is not int: raise Exception(f"Invalid osu! version {_osu_version}.")
-        self.osu_version = _osu_version
-        self.offset += self.__INT
+        _osu_version = self.unpack_value(self.__INT, True)
 
 
     def parse_main_strings(self):
-        import struct
-
         self.beatmap_md5 = self.parse_string()
         self.username = self.parse_string()
         self.osu_replay_md5 = self.parse_string()
 
 
     def parse_score_variables(self):
-        import struct
+        # Score related vars.
+        
+        # TODO: calcsize properly style?
 
-        # TODO: unsafe?
-        self.num_300s = struct.unpack('<h', self.compressed_data[self.offset:self.offset + self.__SHORT])[0]; self.offset += self.__SHORT
-        self.num_100s = struct.unpack('<h', self.compressed_data[self.offset:self.offset + self.__SHORT])[0]; self.offset += self.__SHORT
-        self.num_50s = struct.unpack('<h', self.compressed_data[self.offset:self.offset + self.__SHORT])[0]; self.offset += self.__SHORT
-        self.num_gekis = struct.unpack('<h', self.compressed_data[self.offset:self.offset + self.__SHORT])[0]; self.offset += self.__SHORT
-        self.num_katus = struct.unpack('<h', self.compressed_data[self.offset:self.offset + self.__SHORT])[0]; self.offset += self.__SHORT
-        self.num_misses = struct.unpack('<h', self.compressed_data[self.offset:self.offset + self.__SHORT])[0]; self.offset += self.__SHORT
-        self.total_score = struct.unpack('<l', self.compressed_data[self.offset:self.offset + self.__INT])[0]; self.offset += self.__INT
-        self.max_combo = struct.unpack('<h', self.compressed_data[self.offset:self.offset + self.__SHORT])[0]; self.offset += self.__SHORT
-        self.full_combo = self.compressed_data[self.offset]; self.offset += self.__BYTE
-        self.mods = struct.unpack('<l', self.compressed_data[self.offset:self.offset + self.__INT])[0]; self.offset += self.__INT
+        self.num_300s = self.unpack_value(self.__SHORT, True)
+        self.num_00s = self.unpack_value(self.__SHORT, True)
+        self.num_50s = self.unpack_value(self.__SHORT, True)
+        self.num_gekis = self.unpack_value(self.__SHORT, True)
+        self.num_katus = self.unpack_value(self.__SHORT, True)
+        self.num_misses = self.unpack_value(self.__SHORT, True)
 
+        self.total_score = self.unpack_value(self.__INT, False)
+
+        self.max_combo = self.unpack_value(self.__SHORT, True)
+        self.full_combo = self.unpack_value(self.__BOOL, False)
+
+        self.mods = self.unpack_value(self.__INT, True)
+
+
+    def unpack_value(self, data_type, unsigned=False):
+        _t = None
+
+        if data_type == self.__BOOL: _t, data_type = '?', self.__BYTE
+        elif data_type == self.__BYTE: self.offset += data_type; return self.compressed_data[self.offset]
+        elif data_type == self.__SHORT: _t = 'h'
+        elif data_type == self.__INT: _t = 'l'
+        elif data_type == self.__LONG: _t = 'q'
+        else: raise Exception(f"Invalid datatype {data_type}.")
+
+        if unsigned: _t = _t.upper()
+
+        resp = struct.unpack('<'+_t, self.compressed_data[self.offset:self.offset + data_type])[0]
+        self.offset += data_type
+        return resp
 
     def parse_secondary_variables(self):
-        import struct
-
         # NOTE: This section is KNOWN to be very broke.
         _hp_graph_data = self.parse_string()
         if _hp_graph_data:
             for _ in _hp_graph_data.split("|"): self.hp_graph_data.append(_) # Cursed line? also definitely improvable with some [for] magic
 
-        self.timestamp = struct.unpack('<q', self.compressed_data[self.offset:self.offset + self.__LONG])[0]; self.offset += self.__LONG
-        self.sizeof_lzma = struct.unpack('<l', self.compressed_data[self.offset:self.offset + self.__INT])[0]; self.offset += self.__INT
+        self.timestamp = self.unpack_value(self.__LONG, True)
+        self.sizeof_lzma = self.unpack_value(self.__INT, True)
 
 
-    def parse_lzma_replay(self):
-        import struct, lzma
-
+    def parse_lzma_replay(self): # TODO: stop fucking -8ing fuck
         #if self.sizeof_lzma != len(self.compressed_data[self.offset:-8]): return 1 # Fuck
 
         self.decompressed = lzma.decompress(self.compressed_data[self.offset:-8], format=lzma.FORMAT_ALONE)
@@ -203,15 +214,13 @@ class Replay(object):
         self.offset = offset_end
         return val
 
+
     def save_replay_headerless(self):
-        import lzma
         with open(self.replay_file, "wb+") as f:
             f.write(lzma.compress(self.decompressed, format=lzma.FORMAT_ALONE)) # SUBOPTIMAL AS FUCK! we don't need to re-lzma.. this is literally making the program x10 slower
 
 if __name__ == "__main__":
-    import sys
-    from time import time
-
+    # todo: move this debug? wtf?
     debug = False
 
     for replay in sys.argv[1:]:
@@ -219,10 +228,9 @@ if __name__ == "__main__":
         with open(replay, "rb") as f:
             r = Replay(f.read(), replay)
 
-        # getch?
         end_time = time()
 
         r.save_replay_headerless()
         if debug: print(f"{r.__dict__}\n\n")
 
-        print('%.2fms' % round(end_time - start_time * 1000, 2))
+        print('%.2fms' % round((end_time - start_time) * 1000, 2))
