@@ -173,9 +173,10 @@ class Replay(object):
     def parse_secondary_variables(self):
         import struct
 
+        # NOTE: This section is KNOWN to be very broke.
         _hp_graph_data = self.parse_string()
         if _hp_graph_data:
-            for _ in self.parse_string().split("|"): self.hp_graph_data.append(_) # Cursed line? also definitely improvable with some [for] magic
+            for _ in _hp_graph_data.split("|"): self.hp_graph_data.append(_) # Cursed line? also definitely improvable with some [for] magic
 
         self.timestamp = struct.unpack('<q', self.compressed_data[self.offset:self.offset + self.__LONG])[0]; self.offset += self.__LONG
         self.sizeof_lzma = struct.unpack('<l', self.compressed_data[self.offset:self.offset + self.__INT])[0]; self.offset += self.__INT
@@ -193,9 +194,9 @@ class Replay(object):
 
     def parse_string(self):
         exists = False
-        if not bytes([self.compressed_data[self.offset]]) == b'\x0b': exists = True
+        if bytes([self.compressed_data[self.offset]]) == b'\x0b': exists = True
         self.offset += self.__BYTE
-        if exists: return
+        if not exists: return
         offset_end = self.offset + self.compressed_data[self.offset] + self.__BYTE; self.offset += self.__BYTE
 
         val = self.compressed_data[self.offset:offset_end].decode("utf-8", "ignore")
