@@ -222,9 +222,7 @@ if __name__ == "__main__":
         # getch?
         end_time = time()
 
-        _st = time()
-        if input("Would you like to save the replay headerless?\n>> ").startswith('y'):
-            _st = time(); r.save_replay_headerless(); _et = time() # Timing yeehaw
+        r.save_replay_headerless()
         if debug: print(f"{r.__dict__}\n\n")
 
-        print('%.2fms' % round((end_time - start_time + (_et - _st)) * 1000, 2))
+        print('%.2fms' % round(end_time - start_time * 1000, 2))
