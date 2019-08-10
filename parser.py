@@ -98,9 +98,8 @@ class Replay(object):
     __LONG  = 8
     __BOOL  = 12
 
-    def __init__(self, replay_data, replay_file):
+    def __init__(self, replay_data):
         self.compressed_data = replay_data
-        self.replay_file = "NH - [" + str(replay_file.split('\\')[-1].split('.osr')[0]) + "].osr"
         self.decompressed = None
         self.offset = 0
 
@@ -227,7 +226,7 @@ class Replay(object):
             self.offset += self.__BYTE
 
             string_length = self.decode_uleb(self.compressed_data)
-            offset_end = self.offset + string_length; self.offset += self.__BYTE
+            offset_end = self.offset + string_length
 
             val = self.compressed_data[self.offset:offset_end].decode("utf-8", "ignore")
             self.offset = offset_end
@@ -242,23 +241,24 @@ class Replay(object):
             self.play_data.append(ReplayAction(w, x, y, z))
 
 
-    def save_replay_headerless(self):
-        with open(self.replay_file, "wb+") as f:
+    def save_replay_headerless(self, replay_file):
+        with open("NH - [" + str(replay_file.split('\\')[-1].split('.osr')[0]) + "].osr", "wb+") as f:
             f.write(self.compressed_data[self.offset:-8]) # TODO: -8 do properly yada yada
 
 
 if __name__ == "__main__":
     # todo: move this debug? wtf?
-    debug = False
+    debug = True
 
     for replay in sys.argv[1:]:
         start_time = time()
+
         with open(replay, "rb") as f:
             _r = f.read()
 
-        r = Replay(_r, replay)
+        r = Replay(_r)
 
-        r.save_replay_headerless()
+        r.save_replay_headerless(replay)
         end_time = time()
         if debug: print(f"{r.__dict__}\n\n")
 
