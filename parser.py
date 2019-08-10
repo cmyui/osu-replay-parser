@@ -241,7 +241,7 @@ class Replay(object):
 
     def save_replay_headerless(self):
         with open(self.replay_file, "wb+") as f:
-            f.write(lzma.compress(self.decompressed, format=lzma.FORMAT_ALONE)) # SUBOPTIMAL AS FUCK! we don't need to re-lzma.. this is literally making the program x10 slower
+            f.write(self.compressed_data[self.offset:-8]) # TODO: -8 do properly yada yada
 
 
 if __name__ == "__main__":
@@ -253,9 +253,9 @@ if __name__ == "__main__":
         with open(replay, "rb") as f:
             r = Replay(f.read(), replay)
 
-        end_time = time()
 
         r.save_replay_headerless()
+        end_time = time()
         if debug: print(f"{r.__dict__}\n\n")
 
         print('%.2fms' % round((end_time - start_time) * 1000, 2))
