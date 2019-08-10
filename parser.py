@@ -46,10 +46,11 @@ class Mod(Enum):
     Key1           = 67108864
     Key3           = 134217728
     Key2           = 268435456
+    """
 
 
 class ReplayAction(object):
-    ###
+    """
     Defines a replay action event.
 
     :param w: Time in milliseconds since the previous action.
@@ -69,7 +70,7 @@ class ReplayAction(object):
                 1+4=5;
                 2+8=10
               )
-    ###
+    """
     # Note: On replays set on version 20130319 or later,
     # the 32-bit integer RNG seed used for the score will be encoded into an additional replay frame at the end of the LZMA stream,
     # under the format -12345|0|0|seed.
@@ -79,12 +80,13 @@ class ReplayAction(object):
         self.y = y
         self.keys_pressed = z
 
+
     def edit_action(self, w=None, x=None, y=None, z=None):
         if w: self.time_since_previous_action = w
         if x: self.x = x
         if y: self.y = y
         if z: self.keys_pressed = z
-"""
+
 
 class Replay(object):
     __BYTE  = 1
@@ -123,39 +125,31 @@ class Replay(object):
 
         self.online_score_id = 0
 
-        self.initialize_fields()
+        self.play_data = []
+
+        self.parse_replay()
 
 
-    def initialize_fields(self):
-        self.parse_main_variables() # gamemode & osu_version
-        self.parse_main_strings() # beatmap_md5 - osu_replay_md5
-        self.parse_score_variables() # num300 - mods
-        self.parse_secondary_variables() # HP
-
+    def parse_replay(self):
+        self.parse_replay_headers()
         self.parse_lzma_replay() # Actual replay data
+        self.create_replay_objects()
 
-    def parse_main_variables(self):
-        _gamemode = self.compressed_data[self.offset]
-        if _gamemode < 0 or _gamemode > 3: raise Exception(f"Invalid gamemode {_gamemode}.")
-        self.gamemode = _gamemode
-        self.offset += self.__BYTE
+    def parse_replay_headers(self):
+        self.gamemode = self.unpack_value(self.__BYTE, False)
+        if self.gamemode < 0 or self.gamemode > 3: raise Exception(f"Invalid gamemode {self.gamemode}.")
 
-        _osu_version = self.unpack_value(self.__INT, True)
+        self.osu_version = self.unpack_value(self.__INT, True)
 
-
-    def parse_main_strings(self):
+        # Strings
         self.beatmap_md5 = self.parse_string()
         self.username = self.parse_string()
         self.osu_replay_md5 = self.parse_string()
 
-
-    def parse_score_variables(self):
         # Score related vars.
-        
         # TODO: calcsize properly style?
-
         self.num_300s = self.unpack_value(self.__SHORT, True)
-        self.num_00s = self.unpack_value(self.__SHORT, True)
+        self.num_100s = self.unpack_value(self.__SHORT, True)
         self.num_50s = self.unpack_value(self.__SHORT, True)
         self.num_gekis = self.unpack_value(self.__SHORT, True)
         self.num_katus = self.unpack_value(self.__SHORT, True)
@@ -168,31 +162,31 @@ class Replay(object):
 
         self.mods = self.unpack_value(self.__INT, True)
 
-
-    def unpack_value(self, data_type, unsigned=False):
-        _t = None
-
-        if data_type == self.__BOOL: _t, data_type = '?', self.__BYTE
-        elif data_type == self.__BYTE: self.offset += data_type; return self.compressed_data[self.offset]
-        elif data_type == self.__SHORT: _t = 'h'
-        elif data_type == self.__INT: _t = 'l'
-        elif data_type == self.__LONG: _t = 'q'
-        else: raise Exception(f"Invalid datatype {data_type}.")
-
-        if unsigned: _t = _t.upper()
-
-        resp = struct.unpack('<'+_t, self.compressed_data[self.offset:self.offset + data_type])[0]
-        self.offset += data_type
-        return resp
-
-    def parse_secondary_variables(self):
         # NOTE: This section is KNOWN to be very broke.
         _hp_graph_data = self.parse_string()
         if _hp_graph_data:
-            for _ in _hp_graph_data.split("|"): self.hp_graph_data.append(_) # Cursed line? also definitely improvable with some [for] magic
+            for _ in _hp_graph_data.split('|'):
+                self.hp_graph_data.append(_.split(',')) # Cursed line? also definitely improvable with some [for] magic
 
         self.timestamp = self.unpack_value(self.__LONG, True)
         self.sizeof_lzma = self.unpack_value(self.__INT, True)
+
+
+    def unpack_value(self, data_type, unsigned=False):
+        _e = None
+
+        if data_type == self.__BOOL: _e, data_type = '?', self.__BYTE
+        elif data_type == self.__BYTE: _=self.compressed_data[self.offset];self.offset += data_type;return _ # why
+        elif data_type == self.__SHORT: _e = 'h'
+        elif data_type == self.__INT: _e = 'l'
+        elif data_type == self.__LONG: _e = 'q'
+        else: raise Exception(f"Invalid datatype {data_type}.")
+
+        if unsigned: _e = _e.upper()
+
+        resp = struct.unpack('<'+_e, self.compressed_data[self.offset:self.offset + data_type])[0]
+        self.offset += data_type
+        return resp
 
 
     def parse_lzma_replay(self): # TODO: stop fucking -8ing fuck
@@ -203,21 +197,52 @@ class Replay(object):
         self.online_score_id = struct.unpack('<q', self.compressed_data[-8:])[0]
 
 
-    def parse_string(self):
-        exists = False
-        if bytes([self.compressed_data[self.offset]]) == b'\x0b': exists = True
-        self.offset += self.__BYTE
-        if not exists: return
-        offset_end = self.offset + self.compressed_data[self.offset] + self.__BYTE; self.offset += self.__BYTE
+    def decode_uleb(self, s):
+        """
+        This is the exact same as kszlim's __decode function in his osrparse program.
 
-        val = self.compressed_data[self.offset:offset_end].decode("utf-8", "ignore")
-        self.offset = offset_end
+        Which can be found here:
+        https://github.com/kszlim/osu-replay-parser/blob/master/osrparse/replay.py#L86-L96.
+        """
+
+        val = 0
+        shift = 0
+        while True:
+            b = s[self.offset]
+            self.offset += 1
+            val = val |((b & 0b01111111) << shift)
+            if (b & 0b10000000) == 0x00: break
+            shift += 7
         return val
+
+
+    def parse_string(self):
+        if bytes([self.compressed_data[self.offset]]) == b'\x00':
+            self.offset += self.__BYTE
+            return
+        elif bytes([self.compressed_data[self.offset]]) == b'\x0b':
+            self.offset += self.__BYTE
+
+            string_length = self.decode_uleb(self.compressed_data)
+            offset_end = self.offset + string_length; self.offset += self.__BYTE
+
+            val = self.compressed_data[self.offset:offset_end].decode("utf-8", "ignore")
+            self.offset = offset_end
+            return val
+        else:
+            raise Exception(f"Failed to parse string. {bytes([self.compressed_data[self.offset]])}")
+
+
+    def create_replay_objects(self):
+        for replay_action in self.decompressed.split(b',')[:-1]: # Last replayaction is cursed3
+            w, x, y, z = replay_action.split(b'|')
+            self.play_data.append(ReplayAction(w, x, y, z))
 
 
     def save_replay_headerless(self):
         with open(self.replay_file, "wb+") as f:
             f.write(lzma.compress(self.decompressed, format=lzma.FORMAT_ALONE)) # SUBOPTIMAL AS FUCK! we don't need to re-lzma.. this is literally making the program x10 slower
+
 
 if __name__ == "__main__":
     # todo: move this debug? wtf?
