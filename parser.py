@@ -82,10 +82,13 @@ class ReplayAction(object):
 
 
     def edit_action(self, w=None, x=None, y=None, z=None):
+        """
         if w: self.time_since_previous_action = w
         if x: self.x = x
         if y: self.y = y
         if z: self.keys_pressed = z
+        """
+        pass
 
 
 class Replay(object):
@@ -251,8 +254,9 @@ if __name__ == "__main__":
     for replay in sys.argv[1:]:
         start_time = time()
         with open(replay, "rb") as f:
-            r = Replay(f.read(), replay)
+            _r = f.read()
 
+        r = Replay(_r, replay)
 
         r.save_replay_headerless()
         end_time = time()
