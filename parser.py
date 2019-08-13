@@ -139,7 +139,7 @@ class Replay(object):
 
     def parse_replay_headers(self):
         self.gamemode = self.unpack_value(self.__BYTE, False)
-        if self.gamemode < 0 or self.gamemode > 3: raise Exception(f"Invalid gamemode {self.gamemode}.")
+        if self.gamemode < 0 or self.gamemode > 3: raise Exception("Invalid gamemode " + str(self.gamemode))
 
         self.osu_version = self.unpack_value(self.__INT, True)
 
@@ -182,7 +182,7 @@ class Replay(object):
         elif data_type == self.__SHORT: _e = 'h'
         elif data_type == self.__INT: _e = 'l'
         elif data_type == self.__LONG: _e = 'q'
-        else: raise Exception(f"Invalid datatype {data_type}.")
+        else: raise Exception("Invalid datatype " + str(data_type))
 
         if unsigned: _e = _e.upper()
 
@@ -209,20 +209,23 @@ class Replay(object):
 
         val = 0
         shift = 0
+
         while True:
             b = s[self.offset]
             self.offset += 1
             val = val |((b & 0b01111111) << shift)
             if (b & 0b10000000) == 0x00: break
             shift += 7
+
         return val
 
 
     def parse_string(self):
-        if bytes([self.compressed_data[self.offset]]) == b'\x00':
+        if self.compressed_data[self.offset] == 0:
             self.offset += self.__BYTE
             return
-        elif bytes([self.compressed_data[self.offset]]) == b'\x0b':
+
+        elif self.compressed_data[self.offset] == 11:
             self.offset += self.__BYTE
 
             string_length = self.decode_uleb(self.compressed_data)
@@ -232,7 +235,7 @@ class Replay(object):
             self.offset = offset_end
             return val
         else:
-            raise Exception(f"Failed to parse string. {bytes([self.compressed_data[self.offset]])}")
+            raise Exception("Failed to parse string." + str(bytes([self.compressed_data[self.offset]])))
 
 
     def create_replay_objects(self):
@@ -242,13 +245,15 @@ class Replay(object):
 
 
     def save_replay_headerless(self, replay_file):
-        with open("NH - [" + str(replay_file.split('\\')[-1].split('.osr')[0]) + "].osr", "wb+") as f:
+        with open("NH - [" + str(replay_file.split('\\')[-1].split(".osr")[0]) + "].osr", "wb+") as f:
             f.write(self.compressed_data[self.offset:-8]) # TODO: -8 do properly yada yada
 
 
 if __name__ == "__main__":
     # todo: move this debug? wtf?
-    debug = True
+    debug = False
+
+    if len(sys.argv) <= 1: raise Exception("Invalid syntax. Please use the syntax as follows.\npython3.6 parser.py <list of replay files, separated by a space>")
 
     for replay in sys.argv[1:]:
         start_time = time()
@@ -260,6 +265,6 @@ if __name__ == "__main__":
 
         r.save_replay_headerless(replay)
         end_time = time()
-        if debug: print(f"{r.__dict__}\n\n")
+        if debug: print(r.__dict__, '', '', sep='\n')
 
-        print('%.2fms' % round((end_time - start_time) * 1000, 2))
+        print("%.2fms" % round((end_time - start_time) * 1000, 2))
