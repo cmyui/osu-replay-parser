@@ -98,6 +98,7 @@ class Replay(object):
     __LONG  = 8
     __BOOL  = 12
 
+
     def __init__(self, replay_data):
         self.compressed_data = replay_data
         self.decompressed = None
@@ -136,6 +137,7 @@ class Replay(object):
         self.parse_replay_headers()
         self.parse_lzma_replay() # Actual replay data
         self.create_replay_objects()
+
 
     def parse_replay_headers(self):
         self.gamemode = self.unpack_value(self.__BYTE, False)
@@ -236,8 +238,8 @@ class Replay(object):
 
 
     def create_replay_objects(self):
-        for replay_action in self.decompressed.split(b',')[:-1]: # Last replayaction is cursed3
-            w, x, y, z = replay_action.split(b'|')
+        for replay_action in self.decompressed.decode("ascii").split(',')[:-1]: # Last replayaction is cursed3
+            w, x, y, z = replay_action.split('|')
             self.play_data.append(ReplayAction(w, x, y, z))
 
 
