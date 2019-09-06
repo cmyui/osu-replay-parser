@@ -1,7 +1,7 @@
 import struct
 import sys
 import lzma
-from time import time
+from time import time, sleep
 
 """
 from enum import Enum
@@ -239,8 +239,8 @@ class Replay(object):
 
 
     def create_replay_objects(self):
-        for replay_action in self.decompressed.split(b',')[:-1]: # Last replayaction is cursed3
-            w, x, y, z = replay_action.split(b'|')
+        for replay_action in self.decompressed.decode("ascii").split(',')[:-1]:
+            w, x, y, z = replay_action.split('|')
             self.play_data.append(ReplayAction(w, x, y, z))
 
 
