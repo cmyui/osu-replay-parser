@@ -81,7 +81,7 @@ class ReplayAction(object):
         self.keys_pressed = z
 
 
-    def edit_action(self, w=None, x=None, y=None, z=None):
+    def edit_action(self, time_since_previous_action=None, x=None, y=None, keys_pressed=None):
         """
         if w: self.time_since_previous_action = w
         if x: self.x = x
@@ -97,6 +97,7 @@ class Replay(object):
     __INT   = 4
     __LONG  = 8
     __BOOL  = 12
+
 
     def __init__(self, replay_data):
         self.compressed_data = replay_data
@@ -137,6 +138,7 @@ class Replay(object):
         self.parse_lzma_replay() # Actual replay data
         self.create_replay_objects()
 
+
     def parse_replay_headers(self):
         self.gamemode = self.unpack_value(self.__BYTE, False)
         if self.gamemode < 0 or self.gamemode > 3: raise Exception("Invalid gamemode " + str(self.gamemode))
@@ -166,9 +168,7 @@ class Replay(object):
 
         # NOTE: This section is KNOWN to be very broke.
         _hp_graph_data = self.parse_string()
-        if _hp_graph_data:
-            for _ in _hp_graph_data.split('|'):
-                self.hp_graph_data.append(_.split(',')) # Cursed line? also definitely improvable with some [for] magic
+        if _hp_graph_data: [self.hp_graph_data.append(_.split(',')) for _ in _hp_graph_data.split('|')] # LOL
 
         self.timestamp = self.unpack_value(self.__LONG, True)
         self.sizeof_lzma = self.unpack_value(self.__INT, True)
@@ -255,16 +255,13 @@ if __name__ == "__main__":
 
     if len(sys.argv) <= 1: raise Exception("Invalid syntax. Please use the syntax as follows.\npython3.6 parser.py <list of replay files, separated by a space>")
 
-    for replay in sys.argv[1:]:
+    for replay_file in sys.argv[1:]:
         start_time = time()
+        with open(replay_file, "rb") as f:
+            replay = Replay(f.read())
 
-        with open(replay, "rb") as f:
-            _r = f.read()
-
-        r = Replay(_r)
-
-        r.save_replay_headerless(replay)
+        replay.save_replay_headerless(replay_file)
         end_time = time()
-        if debug: print(r.__dict__, '', '', sep='\n')
 
-        print("%.2fms" % round((end_time - start_time) * 1000, 2))
+        if debug: print(replay.__dict__, end="\n\n\n")
+        print("%.2fms" % float((end_time - start_time) * 1000))
