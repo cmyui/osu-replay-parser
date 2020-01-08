@@ -42,14 +42,14 @@ class ReplayAction(object):
 
 
 class Replay(object):
-    _BOOL:int   = 0
-    _BYTE:int   = 1
-    _SHORT:int  = 2
-    _INT:int    = 4
-    _LONG:int   = 8
-    _USHORT:int = 16
-    _UINT:int   = 32
-    _ULONG:int  = 64
+    _BOOL:   int = 0
+    _BYTE:   int = 1
+    _SHORT:  int = 2
+    _INT:    int = 4
+    _LONG:   int = 8
+    _USHORT: int = 16
+    _UINT:   int = 32
+    _ULONG:  int = 64
 
 
     def __init__(self, replay_data: bytes) -> None:
